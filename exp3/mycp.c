@@ -173,6 +173,9 @@ int DirToDir(char *source, char *dest) {
   }
 
   while ((currentdp = readdir(currentdir)) != NULL) {
+    if (strcmp(currentdp->d_name, ".") == 0 || strcmp(currentdp->d_name, "..") == 0) 
+      continue;
+      
     sprintf(sourcebuf, "%s/%s", source, currentdp->d_name);
     if (lstat(sourcebuf, &currentstat) != 0) {
       printf("error: cannot get attributes of %s.\n", sourcebuf);
