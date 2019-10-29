@@ -41,20 +41,31 @@ void takeFork(int i) {
   if (pthread_mutex_lock(&pLock) != 0) {
     perror("locking mutex");
   }
-  // get the mutex
-  if (isAvailable(i)) {
-    pFork[i] = 1;
-    pFork[(i + 1) % N] = 1;
-  } else {
-    pthread_cond_wait(&pWait, &pLock);  // wait for mutex again
+  // got the mutex
+  while (1) {
+    if (isAvailable(i)) {
+      pFork[i] = 0;
+      pFork[(i + 1) % N] = 0;
+      break;
+    } else {
+      pthread_cond_wait(&pWait,
+                        &pLock);  // wait for mutex and check forks again
+    }
   }
   printf("[%d] got the forks\n", i);
+  if (pthread_mutex_unlock(&pLock) != 0) {
+    perror("unlocking mutex");
+  }  // release the mutex
 }
 
 void putFork(int i) {
-  // start with mutex
-  pFork[i] = 0;
-  pFork[(i + 1) % N] = 0;
+  // start without the mutex but with both forks
+  if (pthread_mutex_lock(&pLock) != 0) {
+    perror("locking mutex");
+  }
+  // with mutex
+  pFork[i] = 1;
+  pFork[(i + 1) % N] = 1;
   if (pthread_mutex_unlock(&pLock) != 0) {
     perror("unlocking mutex");
   }
