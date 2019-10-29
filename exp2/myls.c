@@ -30,9 +30,17 @@ char *get_perm(mode_t m) {
 
 char get_type(mode_t m) {
   if (S_ISDIR(m)) {
-    return ('d');
+    return 'd';
   } else if (S_ISLNK(m)) {
-    return ('l');
+    return 'l';
+  } else if (S_ISCHR(m)) {
+    return 'c';
+  } else if (S_ISFIFO(m)) {
+    return 'p';
+  } else if (S_ISBLK(m)) {
+    return 'b';
+  } else if (S_ISSOCK(m)) {
+    return 's';
   } else {
     return ('-');
   }

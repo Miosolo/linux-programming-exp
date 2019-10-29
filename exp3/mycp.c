@@ -179,7 +179,7 @@ int DirToDir(char *source, char *dest) {
     sprintf(sourcebuf, "%s/%s", source, currentdp->d_name);
     if (lstat(sourcebuf, &currentstat) != 0) {
       printf("error: cannot get attributes of %s.\n", sourcebuf);
-      ret ^= 1;
+      ret |= 1;
       continue;
     }
 
@@ -188,13 +188,13 @@ int DirToDir(char *source, char *dest) {
       if (access(destbuf, F_OK) != 0 &&
           mkdir(destbuf, currentstat.st_mode) != 0) {
         // mkdir failed
-        ret ^= 1;
+        ret |= 1;
         continue;
       }
-      ret ^= DirToDir(sourcebuf, destbuf);
+      ret |= DirToDir(sourcebuf, destbuf); // use OR to pass over the fault
     } else {
       // regular file
-      ret ^= FileToFile(sourcebuf, destbuf, &currentstat);
+      ret |= FileToFile(sourcebuf, destbuf, &currentstat);
     }
   }
 
