@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define TEXT_SZ 256
+#define TEXT_SZ 64
 #define FULL_SEM_KEY 123
 #define EMPTY_SEM_KEY 321
 #define SHM_BASE 1000
@@ -55,5 +55,6 @@ struct shared_use_st {
 // }
 
 int main() {
-  printf("[2]consumer\n");
+  sleep(1);
+  printf("[1] bob\n");
 }

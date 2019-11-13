@@ -13,8 +13,7 @@
 
 #define SEM_KEY 0xabc
 #define QUEUE_SZ 5
-#define TEXT_SZ 256
-#define OUTPUT_LEN 40
+#define TEXT_SZ 64
 
 union semun {
   int val;
@@ -23,8 +22,8 @@ union semun {
 };
 
 void group_kill(int sig) {
-  printf("bye\n");
-  kill(0, SIGINT);  // interrupt all the process group
+  printf("\nbye\n");
+  kill(0, SIGKILL);  // kill all the process group
 }
 
 int main(int argc, char *argv[]) {
@@ -39,23 +38,29 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  printf("[configeration]: Q=%d, Producer=%d, Consumer=%d\n", QUEUE_SZ, producer_cnt, consumer_cnt);
+  printf("[configeration]: Q=%d, Producer=%d, Consumer=%d\n", QUEUE_SZ,
+         producer_cnt, consumer_cnt);
 
   // pipes & fd set
   fd_set pipes_in;
-  int producer_pipes[producer_cnt][2];
+  FD_ZERO(&pipes_in);
+  int producer_pipes[producer_cnt][2], consumer_pipes[consumer_cnt][2];
+  int max_fd = 0;
+
   for (int i = 0; i < producer_cnt; i++) {
-    producer_pipes[i][0] = 100 + 2 * i;
+    if (pipe(producer_pipes[i]) == -1) {
+      perror("opening pipe");
+    }
     FD_SET(producer_pipes[i][0], &pipes_in);
-    producer_pipes[i][1] = 101 + 2 * i;
+    max_fd = producer_pipes[i][0] > max_fd ? producer_pipes[i][0] : max_fd;
   }
-  int consumer_pipes[consumer_cnt][2];
   for (int i = 0; i < consumer_cnt; i++) {
-    consumer_pipes[i][0] = 300 + 2 * i;
+    if (pipe(consumer_pipes[i]) == -1) {
+      perror("opening pipe");
+    }
     FD_SET(consumer_pipes[i][0], &pipes_in);
-    consumer_pipes[i][1] = 301 + 2 * i;
+    max_fd = consumer_pipes[i][0] > max_fd ? consumer_pipes[i][0] : max_fd;
   }
-  int max_fd = 299 + 2 * consumer_cnt;
 
   // init semaphores
   // sem[0]: full, sem[1]: empty
@@ -75,80 +80,85 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < producer_cnt; i++) {
     int pid = fork();
     if (pid == 0) {
-      continue;
-    } else if (pid == -1) {
-      perror("spawning producer");
-    } else {
       // child
-      close(STDOUT_FILENO);
-      dup(producer_pipes[i][1]);  // replace pipe of stdout
+      dup2(producer_pipes[i][1], STDOUT_FILENO);  // replace pipe of stdout
       execv("./producer", NULL);
+    }
+    if (pid == -1) {
+      perror("spawning producer");
     }
   }
 
   for (int i = 0; i < consumer_cnt; ++i) {
     int pid = fork();
     if (pid == 0) {
-      continue;
+      // child
+      dup2(consumer_pipes[i][1], STDOUT_FILENO);  // replace pipe of stdout
+      execv("./consumer", NULL);
     } else if (pid == -1) {
       perror("spawning consumer");
-    } else {
-      // child
-      close(STDOUT_FILENO);
-      dup(consumer_pipes[i][1]);  // replace pipe of stdout
-      execv("./consumer", NULL);
     }
   }
 
   signal(SIGINT, group_kill);  // register the signal handler
 
-  char *output_lines[QUEUE_SZ];
-  for (int i = 0; i < QUEUE_SZ; i++) {
-    output_lines[i] = (char *)malloc(OUTPUT_LEN);
-    sprintf(output_lines[i], "[%d]|", i);
-  }
+  // reading from pipes connected to childs
+  // message format: "[$qslot] $msg"
 
   // flags of activity
-  char queue_actor[QUEUE_SZ];  // flags not string
-  char queue_msg[QUEUE_SZ][OUTPUT_LEN];   // msg from childs
-  memset(queue_msg, 0, sizeof(queue_msg));
+  char queue_flag[QUEUE_SZ];  // flags not string: prod/cons/0
+  memset(queue_flag, 0, sizeof(queue_flag));
+  char queue_msg[QUEUE_SZ][TEXT_SZ];  // msg from childs
+  char msgbuf[TEXT_SZ + 10];          // msg exchange buffer read from pipes
+
   fd_set select_set = pipes_in;
-  char msgbuf[TEXT_SZ]; // read from pipe
-  int actor;
-  bool first_round = true; // controls refresh
+  int qslot;
+  bool first_round = true;  // controls refresh
+
   for (; select(max_fd + 1, &select_set, NULL, NULL, NULL) != -1;
        select_set = pipes_in) {
-    // mutex restrain of r & w
-    for (int i = 0; i < producer_cnt; i++) {
-      if (FD_ISSET(producer_pipes[i][0], &select_set)) {
-        read(producer_pipes[i][0], msgbuf, TEXT_SZ);
-        sscanf(msgbuf, "[%d]%s", &actor, msgbuf);
-        strncpy(queue_msg[actor], msgbuf, TEXT_SZ-1);
-      }
-    }
-    for (int i = 0; i < producer_cnt; i++) {
-      if (FD_ISSET(consumer_pipes[i][0], &select_set)) {
-        read(consumer_pipes[i][0], msgbuf, TEXT_SZ);
-        sscanf(msgbuf, "[%d]%s", &actor, msgbuf);
-        strncpy(queue_msg[actor], msgbuf, TEXT_SZ-1);
-      }
-    }
+    // // reading phase
+    // // natural mutex restrain of r & w
+    // for (int i = 0; i < producer_cnt; i++) {
+    //   if (FD_ISSET(producer_pipes[i][0], &select_set)) {
+    //     read(producer_pipes[i][0], msgbuf, sizeof(msgbuf));
+    //     sscanf(msgbuf, "[%d] %s", &qslot, msgbuf);
+    //     queue_flag[qslot] = 'p';
+    //     strncpy(queue_msg[qslot], msgbuf, TEXT_SZ);
+    //   }
+    // }
+    // for (int i = 0; i < producer_cnt; i++) {
+    //   if (FD_ISSET(consumer_pipes[i][0], &select_set)) {
+    //     read(consumer_pipes[i][0], msgbuf, sizeof(msgbuf));
+    //     sscanf(msgbuf, "[%d] %s", &qslot, msgbuf);
+    //     queue_flag[qslot] = 'c';
+    //     strncpy(queue_msg[qslot], msgbuf, TEXT_SZ);
+    //   }
+    // }
 
-    // return to top
-    if (!first_round) {
-      for (int l = 0; l < QUEUE_SZ; l++) {
-        printf("\033[A");
-      }
-      fflush(stdout);
-    }
+    // // output phase
+    // // return to top
+    // if (!first_round) {
+    //   for (int l = 0; l < QUEUE_SZ; l++) {
+    //     printf("\033[A");
+    //   }
+    //   fflush(stdout);
+    // }
 
-    // refresh the output
-    for (int l = 0; l < QUEUE_SZ; l++) {
-      if (queue_actor[l] == 'p') {
-        printf("[%d]|<-[producer] %40s\n", l, queue_msg[l]);
-      } else if (queue_actor[l] == 'c') {
-        printf("[%d]|[consumer]-> %40s\n", l, queue_msg[l]);
-      }
-    }
+    // // print out
+    // for (int l = 0; l < QUEUE_SZ; l++) {
+    //   if (queue_flag[l] == 'p') {
+    //     printf("[%d] <-[producer] %-64s\n", l, queue_msg[l]);
+    //   } else if (queue_flag[l] == 'c') {
+    //     printf("[%d] [consumer]-> %-64s\n", l, queue_msg[l]);
+    //   } else {
+    //     //printf("[%d]%-78s\n", " "); // empty;
+    //   }
+    // }
+
+    // // cleanup
+    // memset(queue_flag, 0, sizeof(queue_flag));
+
   }
+  perror("selecting");
 }

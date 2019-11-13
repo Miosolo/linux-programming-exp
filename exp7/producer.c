@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define TEXT_SZ 256
+#define TEXT_SZ 64
 #define SEM_KEY 0xabc
 
 struct shared_use_st {
@@ -55,5 +55,6 @@ struct shared_use_st {
 // }
 
 int main() {
-  printf("[1]producer\n");
+  sleep(1);
+  printf("[2] alice\n");
 }
