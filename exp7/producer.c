@@ -1,60 +1,58 @@
-#include <fcntl.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/sem.h>
-#include <sys/shm.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#define TEXT_SZ 64
-#define SEM_KEY 0xabc
+#include <sys/sem.h>
+#include <sys/shm.h>
 
-struct shared_use_st {
-  // int written;         //非0：表示可读，0表示可写
-  char text[TEXT_SZ];  //记录写入和读取的文本
-};
+#include "semaphore.h"
+#include "shm_common.h"
 
-// int main() {
-//   int running = 1;
-//   void *shm = NULL;
-//   struct shared_use_st *shared = NULL;
-//   char buffer[BUFSIZ + 1];
-//   int shmid;
-//   shmid = shmget((key_t)1234, sizeof(struct shared_use_st), 0666 | IPC_CREAT);
-//   if (shmid == -1) {
-//     exit(EXIT_FAILURE);
-//   }
-//   shm = shmat(shmid, (void *)0, 0);
-//   if (shm == (void *)-1) {
-//     exit(EXIT_FAILURE);
-//   }
-//   printf("Memory attached at %X\n", (int)shm);
-//   shared = (struct shared_use_st *)shm;
+int main(int argc, char *argv[]) {
+  int shm_id;
+  int sem_id;
+  void *shared_memory;
+  shared_use_st *shared_st;
+  if ((shm_id = shmget(SHM_SEED, sizeof(shared_use_st), 0666 | IPC_CREAT)) ==
+      -1) {  //创建共享内存
+    fprintf(
+        stderr,
+        "shmget failed\n");  //第二个参数，size以字节为单位指定需要共享的内存容量
+    exit(EXIT_FAILURE);
+  }
+  if ((sem_id = semget(SEM_SEED, 1, 0666 | IPC_CREAT)) == -1) {  //信号的创建
+    fprintf(stderr, "semget failed\n");
+    exit(EXIT_FAILURE);
+  }
+  if ((shared_memory = shmat(shm_id, 0, 0)) ==
+      (void
+           *)-1) {  //启动对该共享内存的访问，并把共享内存连接到当前进程的地址空间。
+    fprintf(
+        stderr,
+        "shmat failed\n");  //第二个参数通常为空，表示让系统来选择共享内存的地址。
+    exit(EXIT_FAILURE);  //第三个参数，shm_flg是一组标志位，通常为0。
+  }
+  shared_st = (shared_use_st *)shared_memory;
+  shared_st->end_flag = 0;
+  set_semvalue(sem_id, 1);
+  while (shared_st->end_flag == 0) {
+    semaphore_p(sem_id);
+    printf("intput:");
+    scanf("%s", shared_st->shm_sp);
+    shared_st->pid = getpid();
+    semaphore_v(sem_id);
+    if (strcmp(shared_st->shm_sp, "quit") == 0) {
+      shared_st->end_flag = 1;
+    }
+  }
+  sleep(rand() % 2);
+  del_semvalue(sem_id);
+  if (shmdt(shared_memory) == -1) {  //将共享内存从当前进程中分离
+    fprintf(stderr, "shmdt failed\n");
+    exit(EXIT_FAILURE);
+  }
 
-//   while (running) {
-//     if (shared->written == 1) {
-//       sleep(1);
-//       printf("Waiting...\n");
-//     } else {
-//       printf("Enter some text: ");
-//       fgets(buffer, BUFSIZ, stdin);
-//       strncpy(shared->text, buffer, TEXT_SZ);
-//       shared->written = 1;
-//     }
-//     if (strncmp(buffer, "end", 3) == 0) running = 0;
-//   }
-//   if (shmdt(shm) == -1) {
-//     exit(EXIT_FAILURE);
-//   }
-//   if (shmctl(shmid, IPC_RMID, 0) == -1) {
-//     exit(EXIT_FAILURE);
-//   }
-//   exit(EXIT_SUCCESS);
-// }
-
-int main() {
-  sleep(1);
-  printf("[2] alice\n");
+  exit(EXIT_SUCCESS);
 }
