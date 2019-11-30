@@ -11,6 +11,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "shm_common.h"
+#include "semaphore.h"
+
 #define SEM_KEY 0xabc
 #define QUEUE_SZ 5
 #define TEXT_SZ 64

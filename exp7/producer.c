@@ -15,42 +15,49 @@ int main(int argc, char *argv[]) {
   int sem_id;
   void *shared_memory;
   shared_use_st *shared_st;
+
+  // creates a shared mem area
   if ((shm_id = shmget(SHM_SEED, sizeof(shared_use_st), 0666 | IPC_CREAT)) ==
-      -1) {  //创建共享内存
-    fprintf(
-        stderr,
-        "shmget failed\n");  //第二个参数，size以字节为单位指定需要共享的内存容量
+      -1) {
+    perror("shmget");
     exit(EXIT_FAILURE);
   }
-  if ((sem_id = semget(SEM_SEED, 1, 0666 | IPC_CREAT)) == -1) {  //信号的创建
-    fprintf(stderr, "semget failed\n");
+  // creates a sem
+  if ((sem_id = semget(SEM_SEED, 1, 0666 | IPC_CREAT)) == -1) {
+    perror("semget");
     exit(EXIT_FAILURE);
   }
-  if ((shared_memory = shmat(shm_id, 0, 0)) ==
-      (void
-           *)-1) {  //启动对该共享内存的访问，并把共享内存连接到当前进程的地址空间。
-    fprintf(
-        stderr,
-        "shmat failed\n");  //第二个参数通常为空，表示让系统来选择共享内存的地址。
-    exit(EXIT_FAILURE);  //第三个参数，shm_flg是一组标志位，通常为0。
+  // attachs the shm
+  if ((shared_memory = shmat(shm_id, 0, 0)) == (void *)-1) {
+    perror("shmat");
+    exit(EXIT_FAILURE);
   }
+
   shared_st = (shared_use_st *)shared_memory;
-  shared_st->end_flag = 0;
-  set_semvalue(sem_id, 1);
+  shared_st->end_flag = 0;  // blind write
+  shared_st->read_flag = 1; // forced reset
+  set_semvalue(sem_id, 1);  // allows production
+
   while (shared_st->end_flag == 0) {
     semaphore_p(sem_id);
-    printf("intput:");
-    scanf("%s", shared_st->shm_sp);
-    shared_st->pid = getpid();
+    if (shared_st->read_flag) {
+      // content has been consumed
+      printf("[%d]input: ", getpid());
+      scanf("%s", shared_st->shm_sp);
+      shared_st->read_flag = 0;
+      shared_st->src_pid = getpid();
+    }
     semaphore_v(sem_id);
     if (strcmp(shared_st->shm_sp, "quit") == 0) {
       shared_st->end_flag = 1;
     }
   }
+
   sleep(rand() % 2);
   del_semvalue(sem_id);
-  if (shmdt(shared_memory) == -1) {  //将共享内存从当前进程中分离
-    fprintf(stderr, "shmdt failed\n");
+  // detachs the shm
+  if (shmdt(shared_memory) == -1) {
+    perror("shmdt");
     exit(EXIT_FAILURE);
   }
 

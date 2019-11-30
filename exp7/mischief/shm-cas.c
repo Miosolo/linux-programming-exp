@@ -28,7 +28,7 @@ void *shm_create(uint64_t shm_key, int ele_size, int ele_count) {
   uint32_t size = ele_count * ele_count;
 
   /* 创建共享内存 */
-  int shmid = shmget(shm_key, size, IPC_CREAT);
+  int shmid = shmget(shm_key, size, IPC_CREAT|0600);
   if (shmid < 0) {
     perror("shmget error :");
     return NULL;

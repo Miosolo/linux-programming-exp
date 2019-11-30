@@ -9,43 +9,54 @@
 
 #include "semaphore.h"
 #include "shm_common.h"
+
 int main(int argc, char *argv[]) {
   int shm_id;
   int sem_id;
   void *shared_memory;
   shared_use_st *shared_st;
+
+  // creates a shared mem area
   if ((shm_id = shmget(SHM_SEED, sizeof(shared_use_st), 0666 | IPC_CREAT)) ==
       -1) {
-    fprintf(stderr, "shmget failed\n");
+    perror("shmget");
     exit(EXIT_FAILURE);
   }
+  // creates a sem
   if ((sem_id = semget(SEM_SEED, 1, 0666 | IPC_CREAT)) == -1) {
-    fprintf(stderr, "semget failed\n");
+    perror("semget");
     exit(EXIT_FAILURE);
   }
+  // attachs the shm
   if ((shared_memory = shmat(shm_id, 0, 0)) == (void *)-1) {
-    fprintf(stderr, "shmat failed\n");
+    perror("shmat");
     exit(EXIT_FAILURE);
   }
+
   shared_st = (shared_use_st *)shared_memory;
-  shared_st->end_flag = 0;
-  set_semvalue(sem_id, 0);
+  // TO PREVENT "BLIND WRITE", CONSUMERS SHOULD START AFTER PRODUCERS
+  // shared_st->end_flag = 0;  // blind write
+  // set_semvalue(sem_id, 0);  // bans immidiate consumption
   while (shared_st->end_flag == 0) {
     semaphore_p(sem_id);
-    printf("what producer input is %s\n", shared_st->shm_sp);
-    printf("His pid is %d\n", shared_st->pid);
+    if (!shared_st->read_flag) {
+      printf("producer[%d]: %s\n", shared_st->src_pid, shared_st->shm_sp);
+      shared_st->read_flag = 1;
+    }
     semaphore_v(sem_id);
     if (strcmp(shared_st->shm_sp, "quit") == 0) {
       shared_st->end_flag = 1;
     }
   }
+
+  // detachs shm
   if (shmdt(shared_memory) == -1) {
-    fprintf(stderr, "shmdt failed\n");
+    perror("shmdt");
     exit(EXIT_FAILURE);
   }
-
+  // removes sem
   if (shmctl(shm_id, IPC_RMID, 0) == -1) {
-    fprintf(stderr, "shmctl(IPC_RMID) failed\n");
+    perror("shmctl(IPC_RMID)");
     exit(EXIT_FAILURE);
   }
 
