@@ -67,54 +67,53 @@ int main(int argc, char *argv[]) {
   // input param checking
   // 1: source
   // 2: destination
-  if (argc != 3) {
+  if (argc < 2) {
     printf(
         "Input param: 1: source; 2: destination.\n Please check your input.\n");
     return 1;
-  } else {
-    char *source = argv[1], *dest = argv[2];
-    // ls
-    DIR *cwd = opendir(source);
-    if (cwd == NULL) {
-      perror("error: cannot open directory: ");
-      return 1;
+  }
+  char *source = argv[1];
+  // /home/{myname} by default
+  char *dest = argc > 2 ? argv[2] : getenv("HOME");
+
+  // ls
+  DIR *cwd = opendir(source);
+  if (cwd == NULL) {
+    perror("error: cannot open directory: ");
+    return 1;
+  }
+
+  // iter through all files
+  char timebuf[256];
+  char dirbuf[256];
+  struct dirent *entry;
+  while ((entry = readdir(cwd)) != NULL) {
+    if (entry->d_name[0] == '.') continue;  // omit . and ..
+
+    sprintf(dirbuf, "%s/%s", source, entry->d_name);
+    struct stat curstat;
+    if ((lstat(dirbuf, &curstat)) != 0) {
+      // fail
+      perror("error: cannot get file attributes: ");
+      continue;
     }
 
-    // iter through all files
-    char timebuf[256];
-    char dirbuf[256];
-    struct dirent *entry;
-    while ((entry = readdir(cwd)) != NULL) {
-      if (entry->d_name[0] == '.')
-        continue;  // omit . and ..
+    strftime(timebuf, 255, "%Y-%m-%d %H:%M:%S", localtime(&(curstat.st_ctime)));
+    printf("%c%s %2d %9s %9s %7d %s %s ", get_type(curstat.st_mode),
+           get_perm(curstat.st_mode), curstat.st_nlink,
+           getpwuid(curstat.st_uid)->pw_name, getgrgid(curstat.st_gid)->gr_name,
+           curstat.st_size, timebuf, entry->d_name);
+    fflush(stdout);  // write out the imcomplete line
 
-      sprintf(dirbuf, "%s/%s", source, entry->d_name);
-      struct stat curstat;
-      if ((lstat(dirbuf, &curstat)) != 0) {
-        // fail
-        perror("error: cannot get file attributes: ");
-        continue;
-      }
-
-      strftime(timebuf, 255, "%Y-%m-%d %H:%M:%S",
-               localtime(&(curstat.st_ctime)));
-      printf("%c%s %2d %9s %9s %7d %s %s ", get_type(curstat.st_mode),
-             get_perm(curstat.st_mode), curstat.st_nlink,
-             getpwuid(curstat.st_uid)->pw_name,
-             getgrgid(curstat.st_gid)->gr_name, curstat.st_size, timebuf,
-             entry->d_name);
-      fflush(stdout);  // write out the imcomplete line
-
-      // calls mycp
-      char destbuf[256];
-      // mycp limit: destination should be a dir
-      sprintf(destbuf, "%s/%s", dest,
-              S_ISDIR(curstat.st_mode) ? entry->d_name : "");
-      if (mycp_caller_wrapper(dirbuf, destbuf) == 0) {
-        printf("\033[32m[success]\033[0m\n");
-      } else {
-        printf("\033[31m[fail]\033[0m\n");
-      }
-    }  // continue loop
-  }
+    // calls mycp
+    char destbuf[256];
+    // mycp limit: destination should be a dir
+    sprintf(destbuf, "%s/%s", dest,
+            S_ISDIR(curstat.st_mode) ? entry->d_name : "");
+    if (mycp_caller_wrapper(dirbuf, destbuf) == 0) {
+      printf("\033[32m[success]\033[0m\n");
+    } else {
+      printf("\033[31m[fail]\033[0m\n");
+    }
+  }  // continue loop
 }
