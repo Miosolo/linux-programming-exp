@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/sem.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "semaphore.h"
 
@@ -10,6 +11,7 @@ int set_semvalue(int sem_id, int value) {
   union semun sem_union;
   sem_union.val = value;
   if (semctl(sem_id, 0, SETVAL, sem_union) == -1) {
+    perror("setting sem value");
     return 1;
   }
   return 0;
@@ -19,9 +21,10 @@ int set_semvalue(int sem_id, int value) {
 void del_semvalue(int sem_id) {
   union semun sem_union;
 
+  // may fail, but okay
   if (semctl(sem_id, 0, IPC_RMID, sem_union) ==
       -1)  // IPC_RMID：用于删除一个已经无需继续使用的信号量标识符。
-    fprintf(stderr, "Failed to delete semaphore\n");
+    // perror("deleting semphamore");
 }
 
 // sem wait op
@@ -32,7 +35,7 @@ int semaphore_p(int sem_id) {
   sem_b.sem_flg = SEM_UNDO;
 
   if (semop(sem_id, &sem_b, 1) == -1) {
-    fprintf(stderr, "semaphore_p failed\n");
+    perror("semaphore_p");
     return 1;
   }
 
@@ -48,7 +51,7 @@ int semaphore_v(int sem_id) {
   sem_b.sem_flg = SEM_UNDO;
 
   if (semop(sem_id, &sem_b, 1) == -1) {
-    fprintf(stderr, "semaphore_v failed\n");
+    perror("semaphore_v");
     return 1;
   }
 

@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
   int i, err;
   pthread_t tid[20];
   pthread_attr_t attr;
-  if (argc < 2) err_quit("useage: philosopher_th N <-t nsecs>");
+  if (argc < 2) err_quit("usage: philosopher N <-t nsecs>");
   if (argc == 4 && (strcmp(argv[2], "-t")) == 0) {
     nsecs = atoi(argv[3]);
   }

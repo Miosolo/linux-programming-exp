@@ -34,13 +34,12 @@ int main(int argc, char *argv[]) {
   }
 
   shared_st = (shared_use_st *)shared_memory;
-  // TO PREVENT "BLIND WRITE", CONSUMERS SHOULD START AFTER PRODUCERS
-  // shared_st->end_flag = 0;  // blind write
-  // set_semvalue(sem_id, 0);  // bans immidiate consumption
+
   while (shared_st->end_flag == 0) {
     semaphore_p(sem_id);
+    if (shared_st->end_flag == 1) break;
     if (!shared_st->read_flag) {
-      printf("producer[%d]: %s\n", shared_st->src_pid, shared_st->shm_sp);
+      printf("producer[%d]: %s", shared_st->src_pid, shared_st->shm_sp);
       shared_st->read_flag = 1;
     }
     semaphore_v(sem_id);
@@ -54,11 +53,7 @@ int main(int argc, char *argv[]) {
     perror("shmdt");
     exit(EXIT_FAILURE);
   }
-  // removes sem
-  if (shmctl(shm_id, IPC_RMID, 0) == -1) {
-    perror("shmctl(IPC_RMID)");
-    exit(EXIT_FAILURE);
-  }
-
+  
+  del_semvalue(sem_id);
   exit(EXIT_SUCCESS);
 }

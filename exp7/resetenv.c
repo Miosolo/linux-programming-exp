@@ -1,3 +1,6 @@
+// This program is used to init the sem to 1,
+// and set the shm to ready status
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +13,7 @@
 #include "semaphore.h"
 #include "shm_common.h"
 
-int main(int argc, char *argv[]) {
+int main() {
   int shm_id;
   int sem_id;
   void *shared_memory;
@@ -35,30 +38,9 @@ int main(int argc, char *argv[]) {
 
   shared_st = (shared_use_st *)shared_memory;
 
-  while (shared_st->end_flag == 0) {
-    semaphore_p(sem_id);
-    if (shared_st->end_flag == 1) break;
-    if (shared_st->read_flag) {
-      // content has been consumed
-      printf("[%d]input: ", getpid());
-      fgets(shared_st->shm_sp, MAX_SHM_SIZE, stdin);
-      fflush(stdin);
-      shared_st->read_flag = 0;
-      shared_st->src_pid = getpid();
-    }
-    semaphore_v(sem_id);
-    if (strcmp(shared_st->shm_sp, "quit\n") == 0) {
-      shared_st->end_flag = 1;
-    }
-  }
+  shared_st->end_flag = 0;
+  shared_st->read_flag = 1;  // allows production
+  set_semvalue(sem_id, 1);   // allows other producers
 
-  sleep(rand() % 2);
-  del_semvalue(sem_id);
-  // detachs the shm
-  if (shmdt(shared_memory) == -1) {
-    perror("shmdt");
-    exit(EXIT_FAILURE);
-  }
-
-  exit(EXIT_SUCCESS);
+  printf("sem and shm were initiated and ready to go.\n");
 }
